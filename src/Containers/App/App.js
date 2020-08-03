@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Highcharts from "highcharts";
 import HighchartsReact from "highcharts-react-official";
 import "./App.css";
@@ -14,14 +14,18 @@ const options = {
     },
   },
   xAxis: {
-    type:'datetime'
-},
+    type: "datetime",
+  },
   series: [],
 };
-const fetchOilPrices = async () => {
+const fetchOilPrices = async (startDate=0,endDate = 0) => {
   try {
-    const oilPrices = await fetch(OIL_PRICES_URL).then((r) => r.json());
-    
+    let url = `${OIL_PRICES_URL}?startDate=${startDate}`
+    if(endDate > 0){
+      url += `&endDate=${endDate}`
+    }
+    const oilPrices = await fetch(url).then((r) => r.json());
+
     return oilPrices;
   } catch (err) {
     console.error(err);
@@ -34,7 +38,7 @@ const getSeriesFromOilPrices = (oilPrices = []) => {
   const series = titles.map((title) => {
     const pricesPerTitle = oilPrices
       .filter((obj) => obj.title === title)
-      .map((obj) => [obj.timeMeasured,obj.price]  );
+      .map((obj) => [obj.timeMeasured, obj.price]);
 
     return { name: title, data: pricesPerTitle };
   });
@@ -42,21 +46,57 @@ const getSeriesFromOilPrices = (oilPrices = []) => {
   return series;
 };
 function App() {
-  const [chartOptions, setChartOptions] = useState(options);
-  const updateChart = async (event) => {
-    const oilPrices = await fetchOilPrices();
-    const chartSeries = getSeriesFromOilPrices(oilPrices);
+  const [oilPrices,setOilPrices] = useState([])
+  const [fromDateMillis,setFromDateMillis] = useState(0)
+  const [toDateMillis,setToDateMillis] = useState(0)
+ 
+  useEffect(() => {
+    if(!oilPrices.length){
+      fetchOilPrices().then( fetchedOilPrices => {
+        setOilPrices(fetchedOilPrices);
+      }) 
+    }
     
-    const newOptions = {
-      ...chartOptions,
-      series: chartSeries,
-    };
-    setChartOptions(newOptions);
+  }, [oilPrices]);
+
+ 
+  const onFromDateChange = (event) => {
+    const date = event.target.valueAsDate
+    const milliseconds = date.getTime()
+    console.log(milliseconds)
+    fetchOilPrices(milliseconds,toDateMillis).then( fetchedOilPrices => {
+      setOilPrices(fetchedOilPrices);
+    }) 
+    setFromDateMillis(milliseconds)
+  }
+  const onToDateChange = (event) => {
+    const date = event.target.valueAsDate
+    const milliseconds = date.getTime()
+  
+    fetchOilPrices(fromDateMillis,milliseconds).then( fetchedOilPrices => {
+      setOilPrices(fetchedOilPrices);
+    }) 
+    setToDateMillis(milliseconds)
+  }
+  const chartSeries = getSeriesFromOilPrices(oilPrices);
+  const chartOptions = {
+    ...options,
+    series: chartSeries,
   };
+
   return (
     <div>
       <HighchartsReact highcharts={Highcharts} options={chartOptions} />
-      <button onClick={updateChart}> Update chart </button>
+      <div className="inputs">
+        <div className="input-container"> 
+          <label id="from-label">From</label>
+          <input id="from-date" type="date" onChange={onFromDateChange}></input>
+        </div>
+        <div className="input-container">
+          <label id="to-label">To</label>
+          <input id="to-date" type="date" onChange={onToDateChange}></input>
+        </div>
+      </div>
     </div>
   );
 }
